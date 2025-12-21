@@ -6,19 +6,29 @@ import json
 
 # package versions = package_versions.txt
 
+# File path for the 'Houses by suburb 2013-2023.xlsx - Table 1.csv' file - Downloaded from https://discover.data.vic.gov.au/dataset/victorian-property-sales-report-median-house-by-suburb-time-series
+house_data_file_path: str = r"C:\Users\leroy\OneDrive\Documents\VS Code Projects\Suburb property analysis\Houses-by-suburb-2013-2023.xlsx - Table 1.csv"
+
+# File path for the 'Units by suburb 2013-2023.xlsx - Table 1.csv' file - Downloaded from https://discover.data.vic.gov.au/dataset/victorian-property-sales-report-median-unit-by-suburb-time-series
+unit_data_file_path = r"C:\Users\leroy\OneDrive\Documents\VS Code Projects\Suburb property analysis\units-by-suburb-2014-2024.xlsx - Table 1.csv"
+
+# File path for the GeoJson file 'suburb-2-vic.geojson' - Downloaded from https://github.com/tonywr71/GeoJson-Data/blob/master/suburb-2-vic.geojson
+geojson_file_path = r"C:\Users\leroy\OneDrive\Documents\VS Code Projects\Suburb property analysis\suburb-2-vic.geojson"
+
+# File path where you would like to save the output html file
+output_file_path = r'C:\Users\leroy\OneDrive\Documents\VS Code Projects\Suburb property analysis\choropleth_map.html'
+
 ###############################################################
 #################### Read in the data #########################
 ###############################################################
 
 # House Price CSV File import details as below
-h_file_path: str = "C:/Users/leroy/Downloads/Houses-by-suburb-2013-2023.xlsx - Table 1.csv"
 h_column_prefix: str = 'H_'
 h_col_ind_to_read = [0, 2, 3, 4, 5, 6, 7, 8, 9,
                      10, 11, 15]  # Read these rows from house CSV
 h_rows_to_skip: int = 4  # Skip the first 4 rows when reading from CSV
 
 # Unit Price CSV File import details as below
-u_file_path = "C:/Users/leroy/Downloads/units-by-suburb-2014-2024.xlsx - Table 1.csv"
 u_column_prefix: str = 'U_'
 u_col_ind_to_read = [0, 2, 3, 4, 5, 7, 9, 11, 12,
                      13, 14, 24]  # Read these rows from unit CSV
@@ -60,9 +70,9 @@ def csv_importer(file_path: str, col_ind: list[int], rows_to_skip: int, col_name
 
 # Import the files as DataFrames
 house_price_df = csv_importer(
-    h_file_path, h_col_ind_to_read, h_rows_to_skip, col_names, h_column_prefix)
+    house_data_file_path, h_col_ind_to_read, h_rows_to_skip, col_names, h_column_prefix)
 unit_price_df = csv_importer(
-    u_file_path, u_col_ind_to_read, u_rows_to_skip, col_names, u_column_prefix)
+    unit_data_file_path, u_col_ind_to_read, u_rows_to_skip, col_names, u_column_prefix)
 
 
 def dataframe_tidyup(df: pd.DataFrame) -> pd.DataFrame:
@@ -311,6 +321,16 @@ def calculate_portfolio_values(df: pd.DataFrame):
                         # Calculate annual property growth
                         median_property_value = (median_property_value) * \
                             (1+median_property_growth_rate/100)
+                        # Calculate the updated LVR so that we can calculate the updated interest rate as the LVR thresholds change
+                        borrowing_amount = borrowing_amount - required_annual_mortgage_repayments
+                        lvr = math.ceil(10*((float(median_property_value)-borrowing_amount)/median_property_value))/10
+                        # Calculate the updated interest rate given the reducing size of the loan relative to the property price
+                        # If borrowing amount reduces to <0 (which should only happen in the final year of the mortgage), set required_annual_mortgage_repayments to 0
+                        if borrowing_amount > 0:
+                            required_annual_mortgage_repayments = borrowing_amount*((interest_rate[lvr])*(
+                            1+interest_rate[lvr])**duration)/(((1+interest_rate[lvr])**duration)-1)
+                        else:
+                            required_annual_mortgage_repayments = 0
                         # Calculate annual wage increases from CPI
                         combined_discretionary_income = combined_discretionary_income * \
                             (annual_cpi)
@@ -339,7 +359,7 @@ unit_house_df[['H+port_value_at_30_years', 'U+port_value_at_30_years']
               ] = unit_house_df[['H+port_value_at_30_years', 'U+port_value_at_30_years']]/1000000
 
 # Load the GeoJSON data
-with open(r"C:\Users\leroy\Downloads\suburb-2-vic.geojson", 'r') as file:
+with open(geojson_file_path, 'r') as file:
     suburb_gdf = json.load(file)
 
 # Function that adds data to the geojson file for each suburb
@@ -491,4 +511,4 @@ m.get_root().html.add_child(folium.Element(title_html))
 # Add layer control
 folium.LayerControl().add_to(m)
 
-m.save(r'C:\Users\leroy\OneDrive\Documents\VS Code Projects\choropeth_map.html')
+m.save(output_file_path)
